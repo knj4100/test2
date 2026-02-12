@@ -3,70 +3,18 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { TargetSurfaceConfig } from './TargetSurfacePanel';
 import { RestrictedZoneConfig } from './RestrictedZonePanel';
-
-// Constants from App.tsx (replicated here to avoid circular imports or heavy refactoring)
-const pivotPoint = { x: -0.0014, y: 0.001, z: -0.0018 };
-const workEquipmentPivot = { x: -0.00155, y: 0.00188, z: -0.00155 };
-const armPivot = { x: -0.0015, y: 0.0032, z: 0.004 };
-const backetPivot = { x: -0.0015, y: 0.0006, z: 0.00265 };
-const cuttingEdge = { x: -0.001, y: 0.0013, z: 0.00145 };
-
-// Helper function to calculate bucket position (Local Space)
-const calculateBucketPosition = (
-  rotationAngle: number, 
-  boomAngle: number, 
-  armAngle: number, 
-  backetAngle: number,
-  pivotPoint: {x:number, y:number, z:number},
-  workEquipmentPivot: {x:number, y:number, z:number},
-  armPivot: {x:number, y:number, z:number},
-  backetPivot: {x:number, y:number, z:number},
-  cuttingEdge: {x:number, y:number, z:number}
-) => {
-    const mBody = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(pivotPoint.x, pivotPoint.y, pivotPoint.z))
-      .multiply(new THREE.Matrix4().makeRotationY(rotationAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-pivotPoint.x, -pivotPoint.y, -pivotPoint.z));
-      
-    const mBoom = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(workEquipmentPivot.x, workEquipmentPivot.y, workEquipmentPivot.z))
-      .multiply(new THREE.Matrix4().makeRotationX(boomAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-workEquipmentPivot.x, -workEquipmentPivot.y, -workEquipmentPivot.z));
-      
-    const mArm = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(armPivot.x, armPivot.y, armPivot.z))
-      .multiply(new THREE.Matrix4().makeRotationX(armAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-armPivot.x, -armPivot.y, -armPivot.z));
-      
-    // Add Bucket Rotation
-    const mBacket = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(backetPivot.x, backetPivot.y, backetPivot.z))
-      .multiply(new THREE.Matrix4().makeRotationX(backetAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-backetPivot.x, -backetPivot.y, -backetPivot.z));
-      
-    const finalMatrix = new THREE.Matrix4()
-      .multiply(mBody)
-      .multiply(mBoom)
-      .multiply(mArm)
-      .multiply(mBacket); // Include bucket rotation
-    
-    // Transform the Cutting Edge position (which is relative to the Bucket)
-    const pos = new THREE.Vector3(cuttingEdge.x, cuttingEdge.y, cuttingEdge.z);
-    pos.applyMatrix4(finalMatrix);
-    
-    return pos;
-};
+import { calculateBucketPosition, toWorldSpace, EXCAVATOR_PIVOTS } from '../utils/excavatorKinematics';
 
 // Helper function to calculate surface height at (x, z)
 const getSurfaceHeight = (x: number, z: number, config: TargetSurfaceConfig) => {
   if (!config.visible) return -Infinity;
 
   const p0 = new THREE.Vector3(config.position.x, config.position.y, config.position.z);
-  
+
   const euler = new THREE.Euler(
-    THREE.MathUtils.degToRad(config.gradient.x), 
-    0, 
-    THREE.MathUtils.degToRad(config.gradient.z), 
+    THREE.MathUtils.degToRad(config.gradient.x),
+    0,
+    THREE.MathUtils.degToRad(config.gradient.z),
     'XYZ'
   );
   const normal = new THREE.Vector3(0, 1, 0).applyEuler(euler);
@@ -75,14 +23,6 @@ const getSurfaceHeight = (x: number, z: number, config: TargetSurfaceConfig) => 
 
   const y = p0.y - (normal.x * (x - p0.x) + normal.z * (z - p0.z)) / normal.y;
   return y;
-};
-
-// Helper to transform local point to world space
-const toWorld = (localPos: THREE.Vector3, basePos: {x:number, y:number, z:number}, baseRot: number) => {
-  const pos = localPos.clone();
-  pos.applyAxisAngle(new THREE.Vector3(0, 1, 0), baseRot);
-  pos.add(new THREE.Vector3(basePos.x, basePos.y, basePos.z));
-  return pos;
 };
 
 interface GameControllerProps {
@@ -264,24 +204,28 @@ export function GameController({
 
         // Note: We use nextExcavatorPosition/Rotation here to ensure we check against the NEW position of the vehicle
         for (let i = 0; i < maxIterations; i++) {
-            const currentPosLocal = calculateBucketPosition(
-              nextRotation, adjustedBoom, nextArm, nextBacket,
-              pivotPoint, workEquipmentPivot, armPivot, backetPivot, cuttingEdge
-            );
+            const currentPosLocal = calculateBucketPosition({
+              rotation: nextRotation,
+              boom: adjustedBoom,
+              arm: nextArm,
+              backet: nextBacket
+            });
             // Apply 180 degree rotation adjustment
-            const currentPos = toWorld(currentPosLocal, nextExcavatorPosition, nextExcavatorRotation + Math.PI);
-            
+            const currentPos = toWorldSpace(currentPosLocal, nextExcavatorPosition, nextExcavatorRotation + Math.PI);
+
             const currentSurfaceY = getSurfaceHeight(currentPos.x, currentPos.z, surfaceConfig);
             const currentDiff = currentPos.y - currentSurfaceY;
 
             if (currentDiff >= -epsilon) break;
 
             const testBoom = adjustedBoom + derivativeStep;
-            const testPosLocal = calculateBucketPosition(
-              nextRotation, testBoom, nextArm, nextBacket,
-              pivotPoint, workEquipmentPivot, armPivot, backetPivot, cuttingEdge
-            );
-            const testPos = toWorld(testPosLocal, nextExcavatorPosition, nextExcavatorRotation + Math.PI);
+            const testPosLocal = calculateBucketPosition({
+              rotation: nextRotation,
+              boom: testBoom,
+              arm: nextArm,
+              backet: nextBacket
+            });
+            const testPos = toWorldSpace(testPosLocal, nextExcavatorPosition, nextExcavatorRotation + Math.PI);
 
             const testSurfaceY = getSurfaceHeight(testPos.x, testPos.z, surfaceConfig);
             const testDiff = testPos.y - testSurfaceY;
@@ -297,11 +241,13 @@ export function GameController({
             adjustedBoom += clampedAdjustment;
         }
 
-        const finalCheckPosLocal = calculateBucketPosition(
-            nextRotation, adjustedBoom, nextArm, nextBacket,
-            pivotPoint, workEquipmentPivot, armPivot, backetPivot, cuttingEdge
-        );
-        const finalCheckPos = toWorld(finalCheckPosLocal, nextExcavatorPosition, nextExcavatorRotation + Math.PI);
+        const finalCheckPosLocal = calculateBucketPosition({
+            rotation: nextRotation,
+            boom: adjustedBoom,
+            arm: nextArm,
+            backet: nextBacket
+        });
+        const finalCheckPos = toWorldSpace(finalCheckPosLocal, nextExcavatorPosition, nextExcavatorRotation + Math.PI);
         const finalCheckSurfaceY = getSurfaceHeight(finalCheckPos.x, finalCheckPos.z, surfaceConfig);
         
         if (finalCheckPos.y < finalCheckSurfaceY - 0.0001) {
