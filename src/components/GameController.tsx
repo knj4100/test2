@@ -46,7 +46,11 @@ interface GameControllerProps {
   }>;
 }
 
-export function GameController({ 
+// Pre-allocated reusable objects (avoid GC pressure in useFrame)
+const _rayOrigin = new THREE.Vector3();
+const _rayDir = new THREE.Vector3(0, -1, 0);
+
+export function GameController({
   setRotationAngle, 
   setBoomAngle, 
   setArmAngle, 
@@ -151,10 +155,8 @@ export function GameController({
     // Raycast from high up downwards at the new position
     const RAY_ORIGIN_HEIGHT = 10000; // High enough to be above any terrain
     raycaster.current.camera = camera;
-    raycaster.current.set(
-      new THREE.Vector3(nextExcavatorPosition.x, RAY_ORIGIN_HEIGHT, nextExcavatorPosition.z),
-      new THREE.Vector3(0, -1, 0)
-    );
+    _rayOrigin.set(nextExcavatorPosition.x, RAY_ORIGIN_HEIGHT, nextExcavatorPosition.z);
+    raycaster.current.set(_rayOrigin, _rayDir);
 
     // Filter for environment mesh
     // Note: EnvironmentMesh children have userData.isEnvironmentMesh = true

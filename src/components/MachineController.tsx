@@ -14,6 +14,20 @@ interface MachineControllerProps {
   setDozerBladeAngle: (angle: number) => void;
 }
 
+// Pre-allocated reusable objects (avoid GC pressure in useFrame)
+const _euler = new THREE.Euler();
+const _normal = new THREE.Vector3();
+const _surfaceCenter = new THREE.Vector3();
+const _machinePos = new THREE.Vector3();
+const _P = new THREE.Vector3();
+const _C = new THREE.Vector3();
+const _V = new THREE.Vector3();
+const _V_rotated = new THREE.Vector3();
+const _C_local = new THREE.Vector3();
+const _C_world = new THREE.Vector3();
+const _xAxis = new THREE.Vector3(1, 0, 0);
+const _yAxis = new THREE.Vector3(0, 1, 0);
+
 export function MachineController({
   vehicleType,
   surfaceConfig,
@@ -39,38 +53,24 @@ export function MachineController({
     
     const rx = THREE.MathUtils.degToRad(surfaceConfig.gradient.x);
     const rz = THREE.MathUtils.degToRad(surfaceConfig.gradient.z);
-    
-    const euler = new THREE.Euler(rx, 0, rz, 'XYZ');
-    const normal = new THREE.Vector3(0, 1, 0).applyEuler(euler);
-    const surfaceCenter = new THREE.Vector3(
-      surfaceConfig.position.x,
-      surfaceConfig.position.y,
-      surfaceConfig.position.z
-    );
 
-    // 2. Calculate Current Cutting Edge World Position
-    // Dozer Geometry:
-    // Global = MachinePos + RotY(MachineRot) * (Pivot + RotX(BladeAngle) * (CuttingEdge - Pivot))
-    
-    const machinePos = new THREE.Vector3(excavatorPosition.x, excavatorPosition.y, excavatorPosition.z);
-    const machineRot = excavatorRotation + Math.PI; // Scene3D adds PI to rotation
-    
-    const P = new THREE.Vector3(dozerBladePivot.x, dozerBladePivot.y, dozerBladePivot.z);
-    const C = new THREE.Vector3(dozerCuttingEdge.x, dozerCuttingEdge.y, dozerCuttingEdge.z);
-    
-    // Vector from Pivot to Cutting Edge
-    const V = new THREE.Vector3().subVectors(C, P);
-    
-    // Rotate V by current blade angle (around X axis)
-    const V_rotated = V.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), dozerBladeAngle);
-    
-    // Local position of Cutting Edge relative to Machine Center
-    const C_local = new THREE.Vector3().addVectors(P, V_rotated);
-    
-    // World position of Cutting Edge
-    const C_world = C_local.clone()
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), machineRot)
-      .add(machinePos);
+    _euler.set(rx, 0, rz, 'XYZ');
+    _normal.set(0, 1, 0).applyEuler(_euler);
+    _surfaceCenter.set(surfaceConfig.position.x, surfaceConfig.position.y, surfaceConfig.position.z);
+
+    _machinePos.set(excavatorPosition.x, excavatorPosition.y, excavatorPosition.z);
+    const machineRot = excavatorRotation + Math.PI;
+
+    _P.set(dozerBladePivot.x, dozerBladePivot.y, dozerBladePivot.z);
+    _C.set(dozerCuttingEdge.x, dozerCuttingEdge.y, dozerCuttingEdge.z);
+
+    _V.subVectors(_C, _P);
+
+    _V_rotated.copy(_V).applyAxisAngle(_xAxis, dozerBladeAngle);
+
+    _C_local.addVectors(_P, _V_rotated);
+
+    _C_world.copy(_C_local).applyAxisAngle(_yAxis, machineRot).add(_machinePos);
       
     // 3. Calculate Target Height at Cutting Edge Position
     // Plane Equation: N dot (P - S) = 0
@@ -79,11 +79,11 @@ export function MachineController({
     // y = Sy - (Nx/Ny)(x - Sx) - (Nz/Ny)(z - Sz)
     
     // Avoid division by zero if Ny is 0 (vertical plane) - unlikely for terrain
-    if (Math.abs(normal.y) < 0.0001) return;
-    
-    const targetY = surfaceCenter.y 
-      - (normal.x / normal.y) * (C_world.x - surfaceCenter.x)
-      - (normal.z / normal.y) * (C_world.z - surfaceCenter.z);
+    if (Math.abs(_normal.y) < 0.0001) return;
+
+    const targetY = _surfaceCenter.y
+      - (_normal.x / _normal.y) * (_C_world.x - _surfaceCenter.x)
+      - (_normal.z / _normal.y) * (_C_world.z - _surfaceCenter.z);
       
     // 4. Calculate Required Blade Angle
     // We need C_world.y to be targetY.
@@ -97,10 +97,10 @@ export function MachineController({
     // Let K = targetY - machinePos.y - P.y
     // K = A * cos(theta) + B * sin(theta)
     // Where A = V.y, B = -V.z
-    
-    const K = targetY - machinePos.y - P.y;
-    const A = V.y;
-    const B = -V.z;
+
+    const K = targetY - _machinePos.y - _P.y;
+    const A = _V.y;
+    const B = -_V.z;
     
     const R = Math.sqrt(A*A + B*B);
     

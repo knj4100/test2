@@ -27,7 +27,15 @@ interface CameraControllerProps {
   modelRadius?: number;
 }
 
-export function CameraController({ 
+// Pre-allocated reusable objects (avoid GC pressure in useFrame)
+const _desiredUp = new THREE.Vector3();
+const _delta = new THREE.Vector3();
+const _offset = new THREE.Vector3();
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const __lookAtTarget = new THREE.Vector3();
+const __desiredPos = new THREE.Vector3();
+
+export function CameraController({
   mode, 
   rotationAngle, 
   targetPosition, 
@@ -98,17 +106,17 @@ export function CameraController({
     const pos = currentTargetPosition.current;
 
     // Calculate desired Up vector
-    const desiredUp = new THREE.Vector3(0, 1, 0);
-    
+    _desiredUp.set(0, 1, 0);
+
     if (mode === 'top' && topViewMode === 'true') {
        // Set Up vector to Body Backward for "Top view, upside down" (Bottom is Forward)
        const backX = Math.sin(rot);
        const backZ = Math.cos(rot);
-       desiredUp.set(backX, 0, backZ);
+       _desiredUp.set(backX, 0, backZ);
     }
 
     // Smoothly interpolate Up vector for all modes to prevent snapping
-    camera.up.lerp(desiredUp, 0.05);
+    camera.up.lerp(_desiredUp, 0.05);
 
     const orbitControls = controls as unknown as OrbitControlsImpl;
 
@@ -117,10 +125,10 @@ export function CameraController({
       if (orbitControls) {
         // 1. Position Follow
         if (followVehicle) {
-          const delta = new THREE.Vector3().subVectors(pos, lastTargetPosition.current);
-          if (delta.lengthSq() > 0.00000001) {
-            camera.position.add(delta);
-            orbitControls.target.add(delta);
+          _delta.subVectors(pos, lastTargetPosition.current);
+          if (_delta.lengthSq() > 0.00000001) {
+            camera.position.add(_delta);
+            orbitControls.target.add(_delta);
             orbitControls.update();
           }
         }
@@ -130,13 +138,9 @@ export function CameraController({
            const deltaRot = rot - lastRotationAngle.current;
            if (Math.abs(deltaRot) > 0.000001) {
               // Rotate camera position around the target (vehicle)
-              const offset = camera.position.clone().sub(orbitControls.target);
-              
-              // Apply rotation around Y axis
-              // Note: If vehicle rotates left (angle increases), we rotate the camera left around it to maintain relative view
-              offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), deltaRot);
-              
-              camera.position.copy(orbitControls.target).add(offset);
+              _offset.copy(camera.position).sub(orbitControls.target);
+              _offset.applyAxisAngle(_yAxis, deltaRot);
+              camera.position.copy(orbitControls.target).add(_offset);
               orbitControls.update();
            }
         }
@@ -153,13 +157,9 @@ export function CameraController({
     lastRotationAngle.current = rot;
 
     // Base Target Vector (Position to look at)
-    const lookAtTarget = new THREE.Vector3(
-      pos.x, 
-      pos.y + targetOffset, 
-      pos.z
-    );
+    __lookAtTarget.set(pos.x, pos.y + targetOffset, pos.z);
 
-    const desiredPos = new THREE.Vector3();
+    __desiredPos.set(0, 0, 0);
 
     if (mode === 'follow') {
       // SIDE FOLLOW MODE
@@ -173,9 +173,9 @@ export function CameraController({
       
       const effectiveRadius = radius + modelRadius;
 
-      desiredPos.x = pos.x + Math.sin(angle) * effectiveRadius;
-      desiredPos.z = pos.z + Math.cos(angle) * effectiveRadius;
-      desiredPos.y = pos.y + height;
+      _desiredPos.x = pos.x + Math.sin(angle) * effectiveRadius;
+      _desiredPos.z = pos.z + Math.cos(angle) * effectiveRadius;
+      _desiredPos.y = pos.y + height;
 
     } else if (mode === 'top') {
       // TOP FOLLOW MODE
@@ -191,13 +191,13 @@ export function CameraController({
         const backX = Math.sin(rot);
         const backZ = Math.cos(rot);
         
-        desiredPos.x = pos.x + backX * effectiveRadius;
-        desiredPos.z = pos.z + backZ * effectiveRadius;
-        desiredPos.y = pos.y + height;
+        _desiredPos.x = pos.x + backX * effectiveRadius;
+        _desiredPos.z = pos.z + backZ * effectiveRadius;
+        _desiredPos.y = pos.y + height;
         
       } else {
          // True Top: Uses Height only for altitude
-         desiredPos.set(pos.x, pos.y + height, pos.z); 
+         _desiredPos.set(pos.x, pos.y + height, pos.z); 
       }
 
     } else if (mode === 'section') {
@@ -224,7 +224,7 @@ export function CameraController({
       
       // Keep height relative to target? Or fixed? 
       // Usually section view is centered vertically on the target.
-      desiredPos.set(pos.x + offsetX, pos.y + targetOffset, pos.z + offsetZ);
+      _desiredPos.set(pos.x + offsetX, pos.y + targetOffset, pos.z + offsetZ);
     }
 
     // Handle Zoom for Orthographic Camera (Global)
@@ -241,14 +241,14 @@ export function CameraController({
     }
 
     // Smoothly interpolate camera position
-    camera.position.lerp(desiredPos, 0.1);
+    camera.position.lerp(_desiredPos, 0.1);
     
     // Make camera look at the target
-    camera.lookAt(lookAtTarget);
+    camera.lookAt(_lookAtTarget);
     
     // If controls exist, update their target to match where we are looking
     if (orbitControls) {
-      orbitControls.target.lerp(lookAtTarget, 0.1);
+      orbitControls.target.lerp(_lookAtTarget, 0.1);
       orbitControls.update();
     }
   });
