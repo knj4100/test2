@@ -50,12 +50,20 @@ export const ENV = {
     LIGHT6: getOptionalEnvVar('VITE_MODEL_URL_LIGHT6'),
     LIGHT7: getOptionalEnvVar('VITE_MODEL_URL_LIGHT7'),
     MESH_DIVIDE: getOptionalEnvVar('VITE_MODEL_URL_MESH_DIVIDE'),
-    // 掘削機モデルのURL（オプショナル - ハードコード値をここに移行予定）
-    EXCAVATOR_LOWER: getOptionalEnvVar('VITE_MODEL_URL_EXCAVATOR_LOWER'),
-    EXCAVATOR_BODY: getOptionalEnvVar('VITE_MODEL_URL_EXCAVATOR_BODY'),
-    EXCAVATOR_BOOM: getOptionalEnvVar('VITE_MODEL_URL_EXCAVATOR_BOOM'),
-    EXCAVATOR_ARM: getOptionalEnvVar('VITE_MODEL_URL_EXCAVATOR_ARM'),
-    EXCAVATOR_BACKET: getOptionalEnvVar('VITE_MODEL_URL_EXCAVATOR_BACKET')
+    // 掘削機モデルのURL
+    EXCAVATOR_LOWER: getOptionalEnvVar('VITE_MODEL_PC200_LOWER'),
+    EXCAVATOR_BODY: getOptionalEnvVar('VITE_MODEL_PC200_BODY'),
+    EXCAVATOR_BOOM: getOptionalEnvVar('VITE_MODEL_PC200_BOOM'),
+    EXCAVATOR_ARM: getOptionalEnvVar('VITE_MODEL_PC200_ARM'),
+    EXCAVATOR_BACKET: getOptionalEnvVar('VITE_MODEL_PC200_BACKET'),
+    // ダンプトラックモデルのURL
+    DUMP_TRUCK: getOptionalEnvVar('VITE_MODEL_HD_DUMP_TRUCK'),
+    // ドーザーモデルのURL
+    DOZER_BODY: getOptionalEnvVar('VITE_MODEL_D475_BODY'),
+    DOZER_BLADE: getOptionalEnvVar('VITE_MODEL_D475_BLADE'),
+    // 環境オブジェクトモデルのURL
+    ENV_CANE: getOptionalEnvVar('VITE_MODEL_ENV_CANE'),
+    ENV_HUMAN: getOptionalEnvVar('VITE_MODEL_ENV_HUMAN')
   }
 } as const;
 

@@ -30,7 +30,7 @@ export function LargeDozer({
     // Traverse the scene to enable shadows and fix materials if needed
     const setupShadows = (scene: THREE.Group) => {
       scene.traverse((child) => {
-        if ((child as Mesh).isMesh) {
+        if ((child as THREE.Mesh).isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
