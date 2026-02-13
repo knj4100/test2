@@ -3,7 +3,7 @@ import { useFBX } from '@react-three/drei';
 import { GroupProps } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const DUMP_TRUCK_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/HD/HD1500_HD.fbx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL0hEL0hEMTUwMF9IRC5mYngiLCJpYXQiOjE3NzA4MDIwMjMsImV4cCI6MTgwMjMzODAyM30.PErkhq4kXaw6ldLyDSgTXb43ulgawL39wlwfXZ0K4IA";
+const DUMP_TRUCK_URL = import.meta.env.VITE_MODEL_HD_DUMP_TRUCK;
 
 interface DumpTruckProps extends GroupProps {}
 

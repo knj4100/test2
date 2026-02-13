@@ -3,9 +3,8 @@ import { useGLTF } from '@react-three/drei';
 import { GroupProps } from '@react-three/fiber';
 import * as THREE from 'three';
 
-// Signed URL provided by the user
-const DOZER_BODY_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/D475/D475_body.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL0Q0NzUvRDQ3NV9ib2R5LmdsdGYiLCJpYXQiOjE3NzA4MDIwMTYsImV4cCI6MTgwMjMzODAxNn0.gPhqPI5l072nalEuW1YcQVleuyiRF0BFrWfo_Rw2zDo";
-const DOZER_BLADE_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/D475/D475_blade.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL0Q0NzUvRDQ3NV9ibGFkZS5nbHRmIiwiaWF0IjoxNzcwODAyMDA3LCJleHAiOjE4MDIzMzgwMDd9.4i46W0zmhgnmMG77yqLWRciW-pQAzUJCqJ6uPeNjBrc";
+const DOZER_BODY_URL = import.meta.env.VITE_MODEL_D475_BODY;
+const DOZER_BLADE_URL = import.meta.env.VITE_MODEL_D475_BLADE;
 
 interface LargeDozerProps extends GroupProps {
   bladeAngle?: number;

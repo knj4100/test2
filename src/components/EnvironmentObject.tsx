@@ -2,8 +2,8 @@ import { useGLTF } from '@react-three/drei';
 import { useMemo } from 'react';
 
 const MODELS = {
-  cane: 'https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/Environment/cane.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL0Vudmlyb25tZW50L2NhbmUuZ2x0ZiIsImlhdCI6MTc2NDMzMDYxMiwiZXhwIjoxNzk1ODY2NjEyfQ.K9sUMHZPexEeddDWLaTVZxPYAsRuNO3Ah5rG51cf7kU',
-  human: 'https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/Environment/human.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL0Vudmlyb25tZW50L2h1bWFuLmdsdGYiLCJpYXQiOjE3NjQzMzA2MzMsImV4cCI6MTc5NTg2NjYzM30.NnlFjgf_EtHlyV3vhQCE8tdz3p86pw77BV81_a5CpsM'
+  cane: import.meta.env.VITE_MODEL_ENV_CANE,
+  human: import.meta.env.VITE_MODEL_ENV_HUMAN,
 };
 
 interface EnvironmentObjectProps {

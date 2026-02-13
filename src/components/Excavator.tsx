@@ -3,11 +3,11 @@ import { GroupProps } from "@react-three/fiber";
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
 
-const LOWER_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/PC200/Lower.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL1BDMjAwL0xvd2VyLmdsdGYiLCJpYXQiOjE3NzA4MDE5NjYsImV4cCI6MTgwMjMzNzk2Nn0.N6u6fTH1z9tYwH5Gj9HIxmkIm91OR4oB_BZCLJzzsSY";
-const BODY_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/PC200/Body.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL1BDMjAwL0JvZHkuZ2x0ZiIsImlhdCI6MTc3MDgwMTk3NiwiZXhwIjoxODAyMzM3OTc2fQ.2YLVdT8Z3Vs9G1zQNy_z42kHy5NuwPBuu9IU9Z-Rpls";
-const BOOM_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/PC200/Boom.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL1BDMjAwL0Jvb20uZ2x0ZiIsImlhdCI6MTc3MDgwMTk4NCwiZXhwIjoxODAyMzM3OTg0fQ.I4FhU5IQFMy1Qq1ak3JFypyuoIyR3bFa-kMbjHHBtao";
-const ARM_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/PC200/Arm.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL1BDMjAwL0FybS5nbHRmIiwiaWF0IjoxNzcwODAxOTkyLCJleHAiOjE4MDIzMzc5OTJ9.yDFQOZ_oum0mGetC2TIbVdwY-w58-8VtztCjhyBS9xM";
-const BACKET_URL = "https://fqyinbccxulilbfzqxyg.supabase.co/storage/v1/object/sign/3DMC/PC200/Backet.gltf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wMDA1YzBjYi1lNTJhLTQzMWUtYmE1NC0yZGNlOGY2NjFhZTMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiIzRE1DL1BDMjAwL0JhY2tldC5nbHRmIiwiaWF0IjoxNzcwODAxOTk5LCJleHAiOjE4MDIzMzc5OTl9.4c5TErv86uzlaivUOeIxL1mzxcZfMsZQi9tUgnSktOM";
+const LOWER_URL = import.meta.env.VITE_MODEL_PC200_LOWER;
+const BODY_URL = import.meta.env.VITE_MODEL_PC200_BODY;
+const BOOM_URL = import.meta.env.VITE_MODEL_PC200_BOOM;
+const ARM_URL = import.meta.env.VITE_MODEL_PC200_ARM;
+const BACKET_URL = import.meta.env.VITE_MODEL_PC200_BACKET;
 
 
 interface Position {
