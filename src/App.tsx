@@ -16,101 +16,39 @@ import { ModelErrorBoundary } from './components/ModelErrorBoundary';
 import { Scene3D } from './components/Scene3D';
 import { Slider } from './components/ui/slider';
 import * as THREE from 'three';
+import { calculateBucketPosition, toWorldSpace, EXCAVATOR_PIVOTS, DOZER_PIVOTS } from './utils/excavatorKinematics';
+import { ENV } from './config/environment';
 
 // Environment Models (URLs loaded from environment variables)
 const AVAILABLE_MODELS = [
   {
     id: 'light4',
     name: 'Environment Light 4',
-    url: import.meta.env.VITE_MODEL_URL_LIGHT4 || ''
+    url: ENV.MODEL_URLS.LIGHT4
   },
   {
     id: 'light5',
     name: 'Environment Light 5',
-    url: import.meta.env.VITE_MODEL_URL_LIGHT5 || ''
+    url: ENV.MODEL_URLS.LIGHT5
   },
   {
     id: 'light6',
     name: 'Environment Light 6',
-    url: import.meta.env.VITE_MODEL_URL_LIGHT6 || ''
+    url: ENV.MODEL_URLS.LIGHT6
   },
   {
     id: 'light7',
     name: 'Environment Light 7',
-    url: import.meta.env.VITE_MODEL_URL_LIGHT7 || ''
+    url: ENV.MODEL_URLS.LIGHT7
   },
   {
     id: 'mesh_divide',
     name: '3D Mesh Divide',
-    url: import.meta.env.VITE_MODEL_URL_MESH_DIVIDE || ''
+    url: ENV.MODEL_URLS.MESH_DIVIDE
   }
 ];
 
-// Helper function to calculate bucket position
-const calculateBucketPosition = (
-  rotationAngle: number, 
-  boomAngle: number, 
-  armAngle: number, 
-  backetAngle: number, // Unused in current FK logic but kept for future use if needed? No, matrix logic uses 0,0,0 for bucket group locally?
-  // Wait, the original getBucketPosition code used backetPivot but didn't apply backet rotation to the point itself because the point IS the pivot?
-  // Let's check the original code carefully.
-  // pos = new THREE.Vector3(backetPivot.x, backetPivot.y, backetPivot.z);
-  // This is the position of the pivot. The cutting edge is attached to the bucket.
-  // The "Cutting Edge" position in the original code (getBucketPosition) seemed to return the bucket pivot position?
-  // Let's re-read getBucketPosition in previous App.tsx.
-  // It returns: const pos = new THREE.Vector3(backetPivot.x, backetPivot.y, backetPivot.z);
-  // pos.applyMatrix4(finalMatrix);
-  // Wait, the finalMatrix includes body*boom*arm.
-  // The bucket pivot is relative to the Arm group.
-  // So transforming backetPivot by Body*Boom*Arm gives the world position of the Bucket Pivot.
-  // BUT, we want to check the Cutting Edge position for collision, right?
-  // The user asked "Target Surfaceの面に沿って...". Usually this means the cutting edge.
-  // The original code defined `cuttingEdge` constant but getBucketPosition didn't use it?
-  // Let's look at `cuttingEdge` usage. It's passed to Excavator.
-  // Inside Excavator:
-  // <group position={[cuttingEdge.x, cuttingEdge.y, cuttingEdge.z]} ...>
-  // The cutting edge is relative to the Bucket group.
-  // So we need to calculate the full FK chain including the bucket rotation to get the cutting edge world pos.
-  
-  pivotPoint: {x:number, y:number, z:number},
-  workEquipmentPivot: {x:number, y:number, z:number},
-  armPivot: {x:number, y:number, z:number},
-  backetPivot: {x:number, y:number, z:number},
-  cuttingEdge: {x:number, y:number, z:number}
-) => {
-    const mBody = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(pivotPoint.x, pivotPoint.y, pivotPoint.z))
-      .multiply(new THREE.Matrix4().makeRotationY(rotationAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-pivotPoint.x, -pivotPoint.y, -pivotPoint.z));
-      
-    const mBoom = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(workEquipmentPivot.x, workEquipmentPivot.y, workEquipmentPivot.z))
-      .multiply(new THREE.Matrix4().makeRotationX(boomAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-workEquipmentPivot.x, -workEquipmentPivot.y, -workEquipmentPivot.z));
-      
-    const mArm = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(armPivot.x, armPivot.y, armPivot.z))
-      .multiply(new THREE.Matrix4().makeRotationX(armAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-armPivot.x, -armPivot.y, -armPivot.z));
-      
-    // Add Bucket Rotation
-    const mBacket = new THREE.Matrix4()
-      .multiply(new THREE.Matrix4().makeTranslation(backetPivot.x, backetPivot.y, backetPivot.z))
-      .multiply(new THREE.Matrix4().makeRotationX(backetAngle))
-      .multiply(new THREE.Matrix4().makeTranslation(-backetPivot.x, -backetPivot.y, -backetPivot.z));
-      
-    const finalMatrix = new THREE.Matrix4()
-      .multiply(mBody)
-      .multiply(mBoom)
-      .multiply(mArm)
-      .multiply(mBacket); // Include bucket rotation
-    
-    // Transform the Cutting Edge position (which is relative to the Bucket)
-    const pos = new THREE.Vector3(cuttingEdge.x, cuttingEdge.y, cuttingEdge.z);
-    pos.applyMatrix4(finalMatrix);
-    
-    return pos;
-}
+// Helper function to calculate bucket position has been moved to utils/excavatorKinematics.ts
 
 // Helper function to calculate surface height at (x, z)
 const getSurfaceHeight = (x: number, z: number, config: TargetSurfaceConfig) => {
@@ -142,25 +80,7 @@ export default function App() {
   const view2Ref = useRef<HTMLDivElement>(null);
   const [splitScreen, setSplitScreen] = useState(true);
 
-  // Fixed Pivot Point for Rotation (Y-axis)
-  const pivotPoint = { x: -0.0014, y: 0.001, z: -0.0018 };
-  // Fixed Pivot Point for Work Equipment (Boom) (X-axis)
-  const workEquipmentPivot = { x: -0.00155, y: 0.00188, z: -0.00155 };
-  // Fixed Pivot Point for Arm (X-axis)
-  const armPivot = { x: -0.0015, y: 0.0032, z: 0.004 };
-  // Fixed Pivot Point for Backet (X-axis)
-  const backetPivot = { x: -0.0015, y: 0.0006, z: 0.00265 };
-
-  // Fixed Cutting Edge Position
-  const cuttingEdge = { x: -0.001, y: 0.0013, z: 0.00145 };
-
-  // Helper to transform local point to world space
-  const toWorld = (localPos: THREE.Vector3, basePos: {x:number, y:number, z:number}, baseRot: number) => {
-    const pos = localPos.clone();
-    pos.applyAxisAngle(new THREE.Vector3(0, 1, 0), baseRot);
-    pos.add(new THREE.Vector3(basePos.x, basePos.y, basePos.z));
-    return pos;
-  };
+  // Pivot points are now imported from utils/excavatorKinematics.ts as EXCAVATOR_PIVOTS
   
   const [rotationAngle, setRotationAngle] = useState(0);
   const [boomAngle, setBoomAngle] = useState(0);
@@ -171,9 +91,8 @@ export default function App() {
 
   // Dozer State
   const [dozerBladeAngle, setDozerBladeAngle] = useState(0);
-  const dozerBladePivot = { x: 0.0045, y: 0.0023, z: -0.0007 };
   // Dozer Cutting Edge (Local to Blade, relative to blade origin)
-  const [dozerCuttingEdge, setDozerCuttingEdge] = useState({ x: 0.0, y: 0.0, z: 0.0126 });
+  const [dozerCuttingEdge, setDozerCuttingEdge] = useState(DOZER_PIVOTS.cuttingEdge);
 
   // Vehicle Selection
   const [vehicleType, setVehicleType] = useState<'excavator' | 'dozer' | 'dump'>('dozer');
@@ -519,16 +438,22 @@ export default function App() {
   // Calculate Target Position based on config
   const getTargetPosition = (config: ViewConfig) => {
      if (config.targetType === 'body') {
-        return toWorld(new THREE.Vector3(pivotPoint.x, pivotPoint.y, pivotPoint.z), excavatorPosition, excavatorRotation + Math.PI);
+        return toWorldSpace(
+          new THREE.Vector3(EXCAVATOR_PIVOTS.body.x, EXCAVATOR_PIVOTS.body.y, EXCAVATOR_PIVOTS.body.z),
+          excavatorPosition,
+          excavatorRotation + Math.PI
+        );
      }
 
      if (vehicleType === 'excavator') {
-       const localPos = calculateBucketPosition(
-          rotationAngle, boomAngle, armAngle, backetAngle,
-          pivotPoint, workEquipmentPivot, armPivot, backetPivot, cuttingEdge
-       );
+       const localPos = calculateBucketPosition({
+          rotation: rotationAngle,
+          boom: boomAngle,
+          arm: armAngle,
+          backet: backetAngle
+       });
        // Apply 180 degree rotation adjustment to match visual model
-       return toWorld(localPos, excavatorPosition, excavatorRotation + Math.PI);
+       return toWorldSpace(localPos, excavatorPosition, excavatorRotation + Math.PI);
      } else if (vehicleType === 'dozer') {
        // Calculate Dozer Blade Edge Position
        const mBody = new THREE.Matrix4()
@@ -536,9 +461,9 @@ export default function App() {
           .multiply(new THREE.Matrix4().makeRotationY(excavatorRotation + Math.PI)); // Model is rotated 180
        
        const mBlade = new THREE.Matrix4()
-          .multiply(new THREE.Matrix4().makeTranslation(dozerBladePivot.x, dozerBladePivot.y, dozerBladePivot.z))
+          .multiply(new THREE.Matrix4().makeTranslation(DOZER_PIVOTS.blade.x, DOZER_PIVOTS.blade.y, DOZER_PIVOTS.blade.z))
           .multiply(new THREE.Matrix4().makeRotationX(dozerBladeAngle))
-          .multiply(new THREE.Matrix4().makeTranslation(-dozerBladePivot.x, -dozerBladePivot.y, -dozerBladePivot.z));
+          .multiply(new THREE.Matrix4().makeTranslation(-DOZER_PIVOTS.blade.x, -DOZER_PIVOTS.blade.y, -DOZER_PIVOTS.blade.z));
        
        const finalMatrix = new THREE.Matrix4()
           .multiply(mBody)
@@ -550,7 +475,7 @@ export default function App() {
        return pos;
      } else {
        // Dump Truck target (Body center for now)
-       return toWorld(new THREE.Vector3(0, 0, 0), excavatorPosition, excavatorRotation + Math.PI);
+       return toWorldSpace(new THREE.Vector3(0, 0, 0), excavatorPosition, excavatorRotation + Math.PI);
      }
   };
 
@@ -584,18 +509,18 @@ export default function App() {
                   vehicleType={vehicleType}
                   excavatorPosition={excavatorPosition}
                   excavatorRotation={excavatorRotation}
-                  pivotPoint={pivotPoint}
+                  pivotPoint={EXCAVATOR_PIVOTS.body}
                   rotationAngle={rotationAngle}
-                  workEquipmentPivot={workEquipmentPivot}
+                  workEquipmentPivot={EXCAVATOR_PIVOTS.workEquipment}
                   boomAngle={boomAngle}
-                  armPivot={armPivot}
+                  armPivot={EXCAVATOR_PIVOTS.arm}
                   armAngle={armAngle}
-                  backetPivot={backetPivot}
+                  backetPivot={EXCAVATOR_PIVOTS.backet}
                   backetAngle={backetAngle}
-                  cuttingEdge={cuttingEdge}
+                  cuttingEdge={EXCAVATOR_PIVOTS.cuttingEdge}
                   cuttingEdgeRef={cuttingEdgeRef}
                   dozerBladeAngle={dozerBladeAngle}
-                  dozerBladePivot={dozerBladePivot}
+                  dozerBladePivot={DOZER_PIVOTS.blade}
                   dozerCuttingEdge={dozerCuttingEdge}
                   lightingConfig={lightingConfig}
                   envMeshConfig={{ ...envMeshConfig, ...view1EnvSettings }}
@@ -638,7 +563,7 @@ export default function App() {
                   surfaceConfig={surfaceConfig}
                   excavatorPosition={excavatorPosition}
                   excavatorRotation={excavatorRotation}
-                  dozerBladePivot={dozerBladePivot}
+                  dozerBladePivot={DOZER_PIVOTS.blade}
                   dozerCuttingEdge={dozerCuttingEdge}
                   dozerBladeAngle={dozerBladeAngle}
                   setDozerBladeAngle={setDozerBladeAngle}
@@ -654,18 +579,18 @@ export default function App() {
                     vehicleType={vehicleType}
                     excavatorPosition={excavatorPosition}
                     excavatorRotation={excavatorRotation}
-                    pivotPoint={pivotPoint}
+                    pivotPoint={EXCAVATOR_PIVOTS.body}
                     rotationAngle={rotationAngle}
-                    workEquipmentPivot={workEquipmentPivot}
+                    workEquipmentPivot={EXCAVATOR_PIVOTS.workEquipment}
                     boomAngle={boomAngle}
-                    armPivot={armPivot}
+                    armPivot={EXCAVATOR_PIVOTS.arm}
                     armAngle={armAngle}
-                    backetPivot={backetPivot}
+                    backetPivot={EXCAVATOR_PIVOTS.backet}
                     backetAngle={backetAngle}
-                    cuttingEdge={cuttingEdge}
+                    cuttingEdge={EXCAVATOR_PIVOTS.cuttingEdge}
                     cuttingEdgeRef={cuttingEdgeRef}
                     dozerBladeAngle={dozerBladeAngle}
-                    dozerBladePivot={dozerBladePivot}
+                    dozerBladePivot={DOZER_PIVOTS.blade}
                     dozerCuttingEdge={dozerCuttingEdge}
                     lightingConfig={lightingConfig}
                     envMeshConfig={{ ...envMeshConfig, ...view2EnvSettings }}
