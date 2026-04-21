@@ -87,6 +87,8 @@ export function GameController({
   }, []);
 
   useFrame((_state, delta) => {
+    if (keys.current.size === 0) return;
+
     const { 
       rotationAngle, boomAngle, armAngle, backetAngle, 
       surfaceConfig, excavatorPosition, excavatorRotation, restrictedZones

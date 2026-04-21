@@ -1,6 +1,6 @@
 import React, { useState, Suspense, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { View, Loader } from '@react-three/drei';
+import { View, Loader, AdaptiveDpr } from '@react-three/drei';
 import { TargetSurfacePanel, TargetSurfaceConfig } from './components/TargetSurfacePanel';
 import { EnvironmentPanel } from './components/EnvironmentPanel';
 import { RestrictedZonePanel } from './components/RestrictedZonePanel';
@@ -11,6 +11,8 @@ import { MachineController } from './components/MachineController';
 import { VehicleSelector } from './components/VehicleSelector';
 import { ViewSettingsPanel } from './components/ViewSettingsPanel';
 import { DebugPanel } from './components/DebugPanel';
+import { FpsReporter } from './components/FpsReporter';
+import { InvalidateOnChange } from './components/InvalidateOnChange';
 import * as THREE from 'three';
 import { calculateBucketPosition, toWorldSpace, EXCAVATOR_PIVOTS, DOZER_PIVOTS } from './utils/excavatorKinematics';
 import { useViewConfig } from './hooks/useViewConfig';
@@ -70,6 +72,19 @@ export default function App() {
     directionalIntensity: 1,
     directionalPosition: { x: 10, y: 10, z: 5 },
     environmentPreset: 'park'
+  });
+
+  // Performance: optional lighter rendering (low-spec / battery)
+  const [performanceFrameloopDemand, setPerformanceFrameloopDemand] = useState(false);
+  const [performanceNoPreserveBuffer, setPerformanceNoPreserveBuffer] = useState(false);
+  const [fps, setFps] = useState(0);
+  const stateDepsForInvalidate = JSON.stringify({
+    rotationAngle, boomAngle, armAngle, backetAngle,
+    excavatorPosition, excavatorRotation, dozerBladeAngle,
+    surfaceConfig: surfaceConfig.visible ? 1 : 0,
+    lightingConfig: lightingConfig.environmentPreset,
+    gridCenter, view1GridConfig: view1GridConfig.visible ? 1 : 0, view2GridConfig: view2GridConfig.visible ? 1 : 0,
+    envMeshConfig: envMeshConfig.visible ? 1 : 0, obstacles: obstacles.length, restrictedZones: restrictedZones.length
   });
 
   const handleSnapToEdge = () => {
@@ -149,11 +164,22 @@ export default function App() {
         <div ref={view1Ref} className={`relative h-full ${splitScreen ? 'flex-1 border-r border-slate-300' : 'w-full'}`} />
         {splitScreen && <div ref={view2Ref} className="flex-1 relative h-full" />}
 
-        <Canvas className="!absolute inset-0 pointer-events-none" eventSource={containerRef} shadows dpr={[1, 1.5]} gl={{ preserveDrawingBuffer: true }}>
+        <Canvas
+          className="!absolute inset-0 pointer-events-none"
+          eventSource={containerRef}
+          shadows
+          dpr={[1, 1.25]}
+          frameloop={performanceFrameloopDemand ? 'demand' : 'always'}
+          gl={{ preserveDrawingBuffer: !performanceNoPreserveBuffer }}
+        >
+          <AdaptiveDpr pixelated />
+          <InvalidateOnChange whenDemand={performanceFrameloopDemand} stateDeps={stateDepsForInvalidate} />
           <View track={view1Ref}>
+            <FpsReporter onFps={setFps} />
             <Suspense fallback={null}>
               <color attach="background" args={['#f0f0f0']} />
               <Scene3D
+                viewActive={!splitScreen || activeSettingsView === 'view1'}
                 vehicleType={vehicleType}
                 excavatorPosition={excavatorPosition}
                 excavatorRotation={excavatorRotation}
@@ -219,11 +245,13 @@ export default function App() {
             </Suspense>
           </View>
 
+          {/* When splitScreen is true, two full Scene3D trees render (2x geometry, 2x useFrame). Future: 1 scene with 2 cameras/viewports to halve cost. */}
           {splitScreen && (
             <View track={view2Ref}>
               <Suspense fallback={null}>
                 <color attach="background" args={['#f0f0f0']} />
                 <Scene3D
+                  viewActive={activeSettingsView === 'view2'}
                   vehicleType={vehicleType}
                   excavatorPosition={excavatorPosition}
                   excavatorRotation={excavatorRotation}
@@ -286,21 +314,19 @@ export default function App() {
             <div className="flex gap-2">
               <button
                 onClick={() => setActiveSettingsView('view1')}
-                className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-md transition-colors border ${
-                  activeSettingsView === 'view1'
+                className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-md transition-colors border ${activeSettingsView === 'view1'
                     ? 'bg-blue-50 text-blue-600 border-blue-200 ring-1 ring-blue-200'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 Left View
               </button>
               <button
                 onClick={() => setActiveSettingsView('view2')}
-                className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-md transition-colors border ${
-                  activeSettingsView === 'view2'
+                className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-md transition-colors border ${activeSettingsView === 'view2'
                     ? 'bg-blue-50 text-blue-600 border-blue-200 ring-1 ring-blue-200'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 Right View
               </button>
@@ -357,6 +383,11 @@ export default function App() {
           excavatorPosition={excavatorPosition}
           envMeshOffsetY={envMeshConfig.position.y}
           surfaceVisible={surfaceConfig.visible}
+          fps={fps}
+          performanceFrameloopDemand={performanceFrameloopDemand}
+          setPerformanceFrameloopDemand={setPerformanceFrameloopDemand}
+          performanceNoPreserveBuffer={performanceNoPreserveBuffer}
+          setPerformanceNoPreserveBuffer={setPerformanceNoPreserveBuffer}
         />
 
         <div className="mt-auto pt-6 text-xs text-slate-400 border-t border-slate-100">

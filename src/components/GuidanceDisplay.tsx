@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -18,15 +18,19 @@ interface GuidanceDisplayProps {
 }
 
 export function GuidanceDisplay({ surfaceConfig, cuttingEdgeRef }: GuidanceDisplayProps) {
-  // Use refs instead of state to avoid re-renders every frame
   const cuttingEdgePosRef = useRef(new THREE.Vector3());
   const targetYRef = useRef<number | null>(null);
   const bucketRightRef = useRef(new THREE.Vector3(1, 0, 0));
   const normalRef = useRef(new THREE.Vector3(0, 1, 0));
   const planePointRef = useRef(new THREE.Vector3());
-  // Counter to trigger re-renders at reduced rate
-  const frameCount = useRef(0);
-  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+
+  // Refs for direct DOM/geometry manipulation (no React re-renders)
+  const distLabelRef = useRef<HTMLDivElement>(null);
+  const vertLineRef = useRef<any>(null);
+  const longLineRef = useRef<any>(null);
+  const bucketLineRef = useRef<any>(null);
+  const htmlGroupRef = useRef<THREE.Group>(null);
+  const isVisibleRef = useRef(false);
 
   const BUCKET_WIDTH = 0.0025;
 
@@ -37,12 +41,24 @@ export function GuidanceDisplay({ surfaceConfig, cuttingEdgeRef }: GuidanceDispl
     return p.y;
   };
 
+  // Reusable line point arrays
+  const vertPoints = useMemo(() => [new THREE.Vector3(), new THREE.Vector3()], []);
+  const longPoints = useMemo(() => [new THREE.Vector3(), new THREE.Vector3()], []);
+  const bucketPoints = useMemo(() => [new THREE.Vector3(), new THREE.Vector3()], []);
+  const _dirXZ = useMemo(() => new THREE.Vector3(), []);
+  const frameCounterRef = useRef(0);
+
   useFrame(() => {
     if (!surfaceConfig.visible || !cuttingEdgeRef.current) {
-      if (targetYRef.current !== null) {
-        targetYRef.current = null;
-        forceUpdate();
+      if (isVisibleRef.current) {
+        isVisibleRef.current = false;
+        // Hide everything via refs
+        if (vertLineRef.current) vertLineRef.current.visible = false;
+        if (longLineRef.current) longLineRef.current.visible = false;
+        if (bucketLineRef.current) bucketLineRef.current.visible = false;
+        if (htmlGroupRef.current) htmlGroupRef.current.visible = false;
       }
+      targetYRef.current = null;
       return;
     }
 
@@ -68,93 +84,107 @@ export function GuidanceDisplay({ surfaceConfig, cuttingEdgeRef }: GuidanceDispl
     const y = getYOnPlane(_worldPos.x, _worldPos.z, _planePoint, _normal);
     targetYRef.current = y;
 
-    // Trigger React re-render every 3 frames (~20fps) instead of every frame
-    frameCount.current++;
-    if (frameCount.current % 3 === 0) {
-      forceUpdate();
+    frameCounterRef.current = (frameCounterRef.current + 1) % 2;
+    const updateGeometry = frameCounterRef.current === 0;
+
+    const pos = _worldPos;
+    const distance = pos.y - y;
+    const absDistance = Math.abs(distance);
+    const color = distance > 0 ? "#ff4444" : "#44ff44";
+
+    // Show elements
+    isVisibleRef.current = true;
+
+    if (vertLineRef.current) vertLineRef.current.visible = true;
+    if (longLineRef.current) longLineRef.current.visible = true;
+    if (bucketLineRef.current) bucketLineRef.current.visible = true;
+    if (htmlGroupRef.current) htmlGroupRef.current.visible = true;
+
+    if (updateGeometry) {
+      if (vertLineRef.current) {
+        const geom = vertLineRef.current.geometry;
+        if (geom) geom.setPositions([pos.x, pos.y, pos.z, pos.x, y, pos.z]);
+      }
+      _dirXZ.set(bucketRightRef.current.x, 0, bucketRightRef.current.z).normalize();
+      const EXTENSION_LENGTH = Math.max(surfaceConfig.size.width, surfaceConfig.size.depth) * 2;
+      const p1lx = pos.x - _dirXZ.x * EXTENSION_LENGTH;
+      const p1lz = pos.z - _dirXZ.z * EXTENSION_LENGTH;
+      const p2lx = pos.x + _dirXZ.x * EXTENSION_LENGTH;
+      const p2lz = pos.z + _dirXZ.z * EXTENSION_LENGTH;
+      const y1l = getYOnPlane(p1lx, p1lz, planePointRef.current, normalRef.current);
+      const y2l = getYOnPlane(p2lx, p2lz, planePointRef.current, normalRef.current);
+      if (longLineRef.current?.geometry) {
+        longLineRef.current.geometry.setPositions([p1lx, y1l, p1lz, p2lx, y2l, p2lz]);
+      }
+      const OFFSET_Y = 0.0001;
+      const p1bx = pos.x - _dirXZ.x * BUCKET_WIDTH / 2;
+      const p1bz = pos.z - _dirXZ.z * BUCKET_WIDTH / 2;
+      const p2bx = pos.x + _dirXZ.x * BUCKET_WIDTH / 2;
+      const p2bz = pos.z + _dirXZ.z * BUCKET_WIDTH / 2;
+      const y1b = getYOnPlane(p1bx, p1bz, planePointRef.current, normalRef.current);
+      const y2b = getYOnPlane(p2bx, p2bz, planePointRef.current, normalRef.current);
+      if (bucketLineRef.current?.geometry) {
+        bucketLineRef.current.geometry.setPositions([p1bx, y1b + OFFSET_Y, p1bz, p2bx, y2b + OFFSET_Y, p2bz]);
+      }
+      if (htmlGroupRef.current) htmlGroupRef.current.position.set(pos.x, (pos.y + y) / 2, pos.z);
+      if (distLabelRef.current) {
+        const distText = absDistance < 1
+          ? `${(distance * 1000).toFixed(0)} mm`
+          : `${distance.toFixed(3)} m`;
+        distLabelRef.current.textContent = distText;
+        distLabelRef.current.style.color = color;
+      }
     }
   });
 
-  if (!surfaceConfig.visible || targetYRef.current === null) return null;
-
-  const pos = cuttingEdgePosRef.current;
-  const targetY = targetYRef.current;
-  const distance = pos.y - targetY;
-  const absDistance = Math.abs(distance);
-  const color = distance > 0 ? "#ff4444" : "#44ff44";
-
-  const distText = absDistance < 1
-    ? `${(distance * 1000).toFixed(0)} mm`
-    : `${distance.toFixed(3)} m`;
-
-  const dirXZ = new THREE.Vector3(bucketRightRef.current.x, 0, bucketRightRef.current.z).normalize();
-  const EXTENSION_LENGTH = Math.max(surfaceConfig.size.width, surfaceConfig.size.depth) * 2;
-
-  const p1_long = { x: pos.x - dirXZ.x * EXTENSION_LENGTH, z: pos.z - dirXZ.z * EXTENSION_LENGTH };
-  const p2_long = { x: pos.x + dirXZ.x * EXTENSION_LENGTH, z: pos.z + dirXZ.z * EXTENSION_LENGTH };
-
-  const y1_long = getYOnPlane(p1_long.x, p1_long.z, planePointRef.current, normalRef.current);
-  const y2_long = getYOnPlane(p2_long.x, p2_long.z, planePointRef.current, normalRef.current);
-
-  const p1_bucket = { x: pos.x - dirXZ.x * BUCKET_WIDTH / 2, z: pos.z - dirXZ.z * BUCKET_WIDTH / 2 };
-  const p2_bucket = { x: pos.x + dirXZ.x * BUCKET_WIDTH / 2, z: pos.z + dirXZ.z * BUCKET_WIDTH / 2 };
-
-  const y1_bucket = getYOnPlane(p1_bucket.x, p1_bucket.z, planePointRef.current, normalRef.current);
-  const y2_bucket = getYOnPlane(p2_bucket.x, p2_bucket.z, planePointRef.current, normalRef.current);
-
-  const OFFSET_Y = 0.0001;
-
+  // Initial render — elements are always mounted but visibility controlled via refs
   return (
     <group>
       <Line
-        points={[
-          [pos.x, pos.y, pos.z],
-          [pos.x, targetY, pos.z]
-        ]}
-        color={color}
+        ref={vertLineRef}
+        points={[[0, 0, 0], [0, 1, 0]]}
+        color="#ff4444"
         lineWidth={2}
         dashed
         dashScale={50}
         dashSize={0.2}
+        visible={false}
       />
       <Line
-        points={[
-          [p1_long.x, y1_long, p1_long.z],
-          [p2_long.x, y2_long, p2_long.z]
-        ]}
-        color={color}
+        ref={longLineRef}
+        points={[[0, 0, 0], [1, 0, 0]]}
+        color="#ff4444"
         lineWidth={1}
         opacity={0.5}
         transparent
+        visible={false}
       />
       <Line
-        points={[
-          [p1_bucket.x, y1_bucket + OFFSET_Y, p1_bucket.z],
-          [p2_bucket.x, y2_bucket + OFFSET_Y, p2_bucket.z]
-        ]}
-        color={color}
+        ref={bucketLineRef}
+        points={[[0, 0, 0], [1, 0, 0]]}
+        color="#ff4444"
         lineWidth={4}
+        visible={false}
       />
-      <Html
-        position={[pos.x, (pos.y + targetY) / 2, pos.z]}
-        center
-        zIndexRange={[100, 0]}
-      >
-        <div
-          style={{
-            color: color,
-            fontWeight: 'bold',
-            fontSize: '12px',
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none'
-          }}
-        >
-          {distText}
-        </div>
-      </Html>
+      <group ref={htmlGroupRef} visible={false}>
+        <Html center zIndexRange={[100, 0]}>
+          <div
+            ref={distLabelRef}
+            style={{
+              color: '#ff4444',
+              fontWeight: 'bold',
+              fontSize: '12px',
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none'
+            }}
+          >
+            --
+          </div>
+        </Html>
+      </group>
     </group>
   );
 }

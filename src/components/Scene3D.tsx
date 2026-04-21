@@ -3,12 +3,13 @@ import { Environment, ContactShadows, OrthographicCamera, PerspectiveCamera, Orb
 import { Excavator } from './Excavator';
 import { LargeDozer } from './LargeDozer';
 import { DumpTruck } from './DumpTruck';
+import { VehicleLOD } from './VehicleLOD';
 import { ModelErrorBoundary } from './ModelErrorBoundary';
 import { CameraController } from './CameraController';
 import { GuidanceDisplay } from './GuidanceDisplay';
 import { EnvironmentMesh } from './EnvironmentMesh';
 import { TerrainGrid } from './TerrainGrid';
-import { EnvironmentObject } from './EnvironmentObject';
+import { ObstaclesGroup } from './ObstaclesGroup';
 import { RestrictedZone } from './RestrictedZone';
 import * as THREE from 'three';
 
@@ -22,7 +23,7 @@ interface Scene3DProps {
   vehicleType: 'excavator' | 'dozer' | 'dump';
   excavatorPosition: { x: number, y: number, z: number };
   excavatorRotation: number;
-  
+
   // Excavator Props
   pivotPoint: { x: number, y: number, z: number };
   rotationAngle: number;
@@ -34,12 +35,12 @@ interface Scene3DProps {
   backetAngle: number;
   cuttingEdge: { x: number, y: number, z: number };
   cuttingEdgeRef: React.RefObject<THREE.Group>;
-  
+
   // Dozer Props
   dozerBladeAngle: number;
   dozerBladePivot: { x: number, y: number, z: number };
   dozerCuttingEdge: { x: number, y: number, z: number };
-  
+
   // Configs
   lightingConfig: LightingConfig;
   envMeshConfig: EnvironmentMeshConfig;
@@ -48,7 +49,7 @@ interface Scene3DProps {
   gridCenter: { x: number, z: number };
   obstacles: Obstacle[];
   restrictedZones: RestrictedZoneConfig[];
-  
+
   // Camera
   environmentUrl: string;
   onGroundDetected: (y: number) => void;
@@ -67,6 +68,8 @@ interface Scene3DProps {
   diagonalAngle: number;
   sideCameraType: 'perspective' | 'orthographic';
   topCameraType: 'perspective' | 'orthographic';
+  /** When false, heavy useFrame (e.g. TerrainGrid) can skip work for inactive view. */
+  viewActive?: boolean;
 }
 
 export function Scene3D({
@@ -109,11 +112,12 @@ export function Scene3D({
   sectionDirection,
   diagonalAngle,
   sideCameraType,
-  topCameraType
+  topCameraType,
+  viewActive = true
 }: Scene3DProps) {
-  
-  const isOrthographic = 
-    cameraMode === 'section' || 
+
+  const isOrthographic =
+    cameraMode === 'section' ||
     (cameraMode === 'follow' && sideCameraType === 'orthographic') ||
     (cameraMode === 'top' && topCameraType === 'orthographic');
 
@@ -121,64 +125,67 @@ export function Scene3D({
     <>
       <PerspectiveCamera makeDefault={!isOrthographic} position={[0.1, 0.1, 0.1]} near={0.001} far={1000} fov={50} />
       <OrthographicCamera makeDefault={isOrthographic} position={[5, 5, 5]} zoom={50} near={-50} far={200} />
-      
+
       <OrbitControls makeDefault target={[0, 0, 0]} />
 
       <ambientLight intensity={lightingConfig.ambientIntensity} />
-      <directionalLight 
+      <directionalLight
         position={[
-          lightingConfig.directionalPosition.x, 
-          lightingConfig.directionalPosition.y, 
+          lightingConfig.directionalPosition.x,
+          lightingConfig.directionalPosition.y,
           lightingConfig.directionalPosition.z
-        ]} 
-        intensity={lightingConfig.directionalIntensity} 
-        castShadow 
-        shadow-mapSize={[1024, 1024]}
+        ]}
+        intensity={lightingConfig.directionalIntensity}
+        castShadow={lightingConfig.shadowEnabled !== false}
+        shadow-mapSize={lightingConfig.shadowMapSize ?? [256, 256]}
       />
       {lightingConfig.environmentPreset !== 'none' && (
         <Environment preset={lightingConfig.environmentPreset} />
       )}
-      
+
       {vehicleType === 'excavator' ? (
         <ModelErrorBoundary name="Excavator">
-          <Excavator 
-            position={[excavatorPosition.x, excavatorPosition.y, excavatorPosition.z]}
-            rotation={[0, excavatorRotation + Math.PI, 0]}
-            pivotPoint={pivotPoint}
-            rotationAngle={rotationAngle}
-            workEquipmentPivot={workEquipmentPivot}
-            boomAngle={boomAngle}
-            armPivot={armPivot}
-            armAngle={armAngle}
-            backetPivot={backetPivot}
-            backetAngle={backetAngle}
-            cuttingEdge={cuttingEdge}
-            cuttingEdgeRef={cuttingEdgeRef}
-          />
+          <VehicleLOD position={[excavatorPosition.x, excavatorPosition.y, excavatorPosition.z]} rotation={[0, excavatorRotation + Math.PI, 0]}>
+            <Excavator
+              position={[0, 0, 0]}
+              rotation={[0, 0, 0]}
+              pivotPoint={pivotPoint}
+              rotationAngle={rotationAngle}
+              workEquipmentPivot={workEquipmentPivot}
+              boomAngle={boomAngle}
+              armPivot={armPivot}
+              armAngle={armAngle}
+              backetPivot={backetPivot}
+              backetAngle={backetAngle}
+              cuttingEdge={cuttingEdge}
+              cuttingEdgeRef={cuttingEdgeRef}
+            />
+          </VehicleLOD>
         </ModelErrorBoundary>
       ) : vehicleType === 'dozer' ? (
         <ModelErrorBoundary name="LargeDozer">
-          <LargeDozer 
-            position={[excavatorPosition.x, excavatorPosition.y, excavatorPosition.z]}
-            rotation={[0, excavatorRotation + Math.PI, 0]}
-            bladeAngle={dozerBladeAngle}
-            bladePivot={dozerBladePivot}
-            cuttingEdge={dozerCuttingEdge}
-            cuttingEdgeRef={cuttingEdgeRef}
-          />
+          <VehicleLOD position={[excavatorPosition.x, excavatorPosition.y, excavatorPosition.z]} rotation={[0, excavatorRotation + Math.PI, 0]}>
+            <LargeDozer
+              position={[0, 0, 0]}
+              rotation={[0, 0, 0]}
+              bladeAngle={dozerBladeAngle}
+              bladePivot={dozerBladePivot}
+              cuttingEdge={dozerCuttingEdge}
+              cuttingEdgeRef={cuttingEdgeRef}
+            />
+          </VehicleLOD>
         </ModelErrorBoundary>
       ) : (
         <ModelErrorBoundary name="DumpTruck">
-           <DumpTruck 
-              position={[excavatorPosition.x, excavatorPosition.y, excavatorPosition.z]}
-              rotation={[0, excavatorRotation + Math.PI, 0]}
-           />
+          <VehicleLOD position={[excavatorPosition.x, excavatorPosition.y, excavatorPosition.z]} rotation={[0, excavatorRotation + Math.PI, 0]}>
+            <DumpTruck position={[0, 0, 0]} rotation={[0, 0, 0]} />
+          </VehicleLOD>
         </ModelErrorBoundary>
       )}
 
-      <CameraController 
-        mode={cameraMode} 
-        rotationAngle={effectiveCameraRotation} 
+      <CameraController
+        mode={cameraMode}
+        rotationAngle={effectiveCameraRotation}
         targetPosition={targetPosition}
         radius={cameraRadius}
         height={cameraHeight}
@@ -192,13 +199,13 @@ export function Scene3D({
         modelRadius={0.005}
       />
 
-      <GuidanceDisplay 
+      <GuidanceDisplay
         surfaceConfig={surfaceConfig}
         cuttingEdgeRef={cuttingEdgeRef}
       />
 
       {surfaceConfig.visible && (
-        <mesh 
+        <mesh
           position={[surfaceConfig.position.x, surfaceConfig.position.y, surfaceConfig.position.z]}
           rotation={[
             THREE.MathUtils.degToRad(surfaceConfig.gradient.x),
@@ -208,20 +215,20 @@ export function Scene3D({
           userData={{ isTargetSurface: true }}
         >
           <boxGeometry args={[surfaceConfig.size.width, surfaceConfig.thickness, surfaceConfig.size.depth]} />
-          <meshStandardMaterial 
-            color={surfaceConfig.color} 
-            transparent 
-            opacity={surfaceConfig.opacity} 
+          <meshStandardMaterial
+            color={surfaceConfig.color}
+            transparent
+            opacity={surfaceConfig.opacity}
           />
         </mesh>
       )}
 
       <ModelErrorBoundary name="EnvironmentMesh">
-        <EnvironmentMesh 
+        <EnvironmentMesh
           url={environmentUrl}
-          position={envMeshConfig.position} 
-          scale={envMeshConfig.scale} 
-          visible={envMeshConfig.visible} 
+          position={envMeshConfig.position}
+          scale={envMeshConfig.scale}
+          visible={envMeshConfig.visible}
           opacity={envMeshConfig.opacity}
           onGroundDetected={onGroundDetected}
           vehiclePosition={{ x: excavatorPosition.x, z: excavatorPosition.z }}
@@ -247,23 +254,17 @@ export function Scene3D({
         gridCenterMode={gridConfig.gridCenterMode}
         continuousUpdate={gridConfig.continuousUpdate}
         vehiclePosition={{ x: excavatorPosition.x, z: excavatorPosition.z }}
+        viewActive={viewActive}
       />
 
-      {obstacles.map(obs => (
-        <EnvironmentObject 
-          key={obs.id}
-          type={obs.type}
-          position={obs.position}
-          scale={obs.scale}
-        />
-      ))}
+      <ObstaclesGroup obstacles={obstacles} />
 
       {/* Hide Restricted Zones in Section View */}
       {cameraMode !== 'section' && restrictedZones.map(zone => (
         <RestrictedZone key={zone.id} config={zone} />
       ))}
 
-      <ContactShadows resolution={1024} scale={20} blur={2} opacity={0.5} far={10} color="#000000" />
+      <ContactShadows resolution={256} frames={1} scale={20} blur={2} opacity={0.5} far={10} color="#000000" />
     </>
   );
 }

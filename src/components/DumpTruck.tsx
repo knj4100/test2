@@ -5,9 +5,11 @@ import * as THREE from 'three';
 
 const DUMP_TRUCK_URL = import.meta.env.VITE_MODEL_HD_DUMP_TRUCK;
 
-interface DumpTruckProps extends GroupProps {}
+if (DUMP_TRUCK_URL) useFBX.preload(DUMP_TRUCK_URL);
 
-export const DumpTruck = React.memo(function DumpTruck(props: DumpTruckProps) {
+interface DumpTruckProps extends GroupProps { }
+
+const DumpTruckInner = React.memo(function DumpTruckInner(props: DumpTruckProps) {
   const fbx = useFBX(DUMP_TRUCK_URL);
   const scene = useMemo(() => fbx.clone(), [fbx]);
 
@@ -27,4 +29,12 @@ export const DumpTruck = React.memo(function DumpTruck(props: DumpTruckProps) {
       <primitive object={scene} scale={[0.00001, 0.00001, 0.00001]} />
     </group>
   );
+});
+
+export const DumpTruck = React.memo(function DumpTruck(props: DumpTruckProps) {
+  if (!DUMP_TRUCK_URL) {
+    console.warn('[DumpTruck] Model URL is not configured. Check VITE_MODEL_HD_DUMP_TRUCK in .env');
+    return null;
+  }
+  return <DumpTruckInner {...props} />;
 });

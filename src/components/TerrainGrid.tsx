@@ -22,7 +22,10 @@ interface TerrainGridProps {
   gridCenterMode?: 'manual' | 'vehicle' | 'bucket';
   continuousUpdate?: boolean;
   vehiclePosition?: { x: number, z: number };
+  viewActive?: boolean;
 }
+
+const MAX_GRID_SIZE = 40;
 
 // Pre-compute target surface normal (avoid creating objects per-call)
 const _p0 = new THREE.Vector3();
@@ -115,12 +118,15 @@ export function TerrainGrid({
   vehicleRotation = 0,
   gridCenterMode = 'manual',
   continuousUpdate = false,
-  vehiclePosition
+  vehiclePosition,
+  viewActive = true
 }: TerrainGridProps) {
   const { scene, gl } = useThree();
+  const effectiveGridSize = Math.min(gridSize, MAX_GRID_SIZE);
   const [geometries, setGeometries] = useState<{
-    fill: THREE.BufferGeometry | null,
-  }>({ fill: null });
+    fill: THREE.BufferGeometry | null;
+    lines: THREE.BufferGeometry | null;
+  }>({ fill: null, lines: null });
 
   const [lineData, setLineData] = useState<{
     points: THREE.Vector3[],
@@ -159,6 +165,9 @@ export function TerrainGrid({
   const sectionPositionsBuf = useRef<number[]>([]);
   const sectionColorsBuf = useRef<number[]>([]);
   const prevSectionKey = useRef('');
+  const prevExcavationKey = useRef('');
+  const needsExcavation = useRef(false);
+  const frameCounterRef = useRef(0);
 
   // Auto-follow state
   const [autoCenter, setAutoCenter] = useState<{ x: number, z: number }>({ x: 0, z: 0 });
@@ -206,12 +215,12 @@ export function TerrainGrid({
     }
 
     // --- GPU Heightmap Generation ---
-    const totalRows = gridSize + 1;
-    const halfSize = (gridSize * gridSpacing) / 2;
+    const totalRows = effectiveGridSize + 1;
+    const halfSize = (effectiveGridSize * gridSpacing) / 2;
     const radiusSq = halfSize * halfSize;
 
     // Ensure render target exists with correct size
-    const rtSize = Math.pow(2, Math.ceil(Math.log2(gridSize * 2)));
+    const rtSize = Math.pow(2, Math.ceil(Math.log2(effectiveGridSize * 2)));
     if (rtSizeRef.current !== rtSize) {
       renderTargetRef.current?.dispose();
       renderTargetRef.current = new THREE.WebGLRenderTarget(rtSize, rtSize, {
@@ -279,8 +288,8 @@ export function TerrainGrid({
         const x = effectiveCenter.x - halfSize + i * gridSpacing;
         const z = effectiveCenter.z - halfSize + j * gridSpacing;
 
-        const px = Math.round(i * (rtSize - 1) / gridSize);
-        const py = Math.round((gridSize - j) * (rtSize - 1) / gridSize);
+        const px = Math.round(i * (rtSize - 1) / effectiveGridSize);
+        const py = Math.round((effectiveGridSize - j) * (rtSize - 1) / effectiveGridSize);
         const pixelIdx = (py * rtSize + px) * 4;
 
         const alpha = pixelData[pixelIdx + 3];
@@ -314,7 +323,7 @@ export function TerrainGrid({
       if (!circularMask) return true;
       const dx = x - effectiveCenter.x;
       const dz = z - effectiveCenter.z;
-      return dx*dx + dz*dz <= radiusSq;
+      return dx * dx + dz * dz <= radiusSq;
     };
 
     // Build line geometry
@@ -325,8 +334,8 @@ export function TerrainGrid({
     const lineColorsVec: [number, number, number][] = [];
 
     const addLineSegment = (
-      p1: {x:number, height:number, z:number},
-      p2: {x:number, height:number, z:number},
+      p1: { x: number, height: number, z: number },
+      p2: { x: number, height: number, z: number },
       idx1: number, idx2: number
     ) => {
       linePointsVec.push(new THREE.Vector3(p1.x, p1.height, p1.z));
@@ -354,29 +363,29 @@ export function TerrainGrid({
     };
 
     // X direction
-    for (let j = 0; j <= gridSize; j++) {
-      for (let i = 0; i < gridSize; i++) {
-        const idx1 = j * (gridSize + 1) + i;
-        const idx2 = j * (gridSize + 1) + (i + 1);
+    for (let j = 0; j <= effectiveGridSize; j++) {
+      for (let i = 0; i < effectiveGridSize; i++) {
+        const idx1 = j * (effectiveGridSize + 1) + i;
+        const idx2 = j * (effectiveGridSize + 1) + (i + 1);
         const p1 = gridPoints[idx1];
         const p2 = gridPoints[idx2];
         if (p1.height !== null && p2.height !== null) {
           if (isInsideMask(p1.x, p1.z) && isInsideMask(p2.x, p2.z)) {
-            addLineSegment({x:p1.x, height:p1.height, z:p1.z}, {x:p2.x, height:p2.height, z:p2.z}, idx1, idx2);
+            addLineSegment({ x: p1.x, height: p1.height, z: p1.z }, { x: p2.x, height: p2.height, z: p2.z }, idx1, idx2);
           }
         }
       }
     }
     // Z direction
-    for (let i = 0; i <= gridSize; i++) {
-      for (let j = 0; j < gridSize; j++) {
-        const idx1 = j * (gridSize + 1) + i;
-        const idx2 = (j + 1) * (gridSize + 1) + i;
+    for (let i = 0; i <= effectiveGridSize; i++) {
+      for (let j = 0; j < effectiveGridSize; j++) {
+        const idx1 = j * (effectiveGridSize + 1) + i;
+        const idx2 = (j + 1) * (effectiveGridSize + 1) + i;
         const p1 = gridPoints[idx1];
         const p2 = gridPoints[idx2];
         if (p1.height !== null && p2.height !== null) {
           if (isInsideMask(p1.x, p1.z) && isInsideMask(p2.x, p2.z)) {
-            addLineSegment({x:p1.x, height:p1.height, z:p1.z}, {x:p2.x, height:p2.height, z:p2.z}, idx1, idx2);
+            addLineSegment({ x: p1.x, height: p1.height, z: p1.z }, { x: p2.x, height: p2.height, z: p2.z }, idx1, idx2);
           }
         }
       }
@@ -393,9 +402,9 @@ export function TerrainGrid({
       const pointIndexMap = new Map<number, number>();
       let vertexCount = 0;
 
-      for (let j = 0; j <= gridSize; j++) {
-        for (let i = 0; i <= gridSize; i++) {
-          const idx = j * (gridSize + 1) + i;
+      for (let j = 0; j <= effectiveGridSize; j++) {
+        for (let i = 0; i <= effectiveGridSize; i++) {
+          const idx = j * (effectiveGridSize + 1) + i;
           const p = gridPoints[idx];
           if (p.height !== null && isInsideMask(p.x, p.z)) {
             fillVertices.push(p.x, p.height, p.z);
@@ -409,14 +418,14 @@ export function TerrainGrid({
         }
       }
 
-      for (let j = 0; j < gridSize; j++) {
-        for (let i = 0; i < gridSize; i++) {
-          const idx1 = j * (gridSize + 1) + i;
-          const idx2 = j * (gridSize + 1) + (i + 1);
-          const idx3 = (j + 1) * (gridSize + 1) + i;
-          const idx4 = (j + 1) * (gridSize + 1) + (i + 1);
+      for (let j = 0; j < effectiveGridSize; j++) {
+        for (let i = 0; i < effectiveGridSize; i++) {
+          const idx1 = j * (effectiveGridSize + 1) + i;
+          const idx2 = j * (effectiveGridSize + 1) + (i + 1);
+          const idx3 = (j + 1) * (effectiveGridSize + 1) + i;
+          const idx4 = (j + 1) * (effectiveGridSize + 1) + (i + 1);
           if (pointIndexMap.has(idx1) && pointIndexMap.has(idx2) &&
-              pointIndexMap.has(idx3) && pointIndexMap.has(idx4)) {
+            pointIndexMap.has(idx3) && pointIndexMap.has(idx4)) {
             const v1 = pointIndexMap.get(idx1)!;
             const v2 = pointIndexMap.get(idx2)!;
             const v3 = pointIndexMap.get(idx3)!;
@@ -445,32 +454,44 @@ export function TerrainGrid({
       sectionColorsVec.push([1, 1, 0]);
     }
 
-    // Store data
+    const linePositions = new Float32Array(linePositionsFlat);
+    const lineColors = new Float32Array(lineColorsFlat);
     gridDataRef.current = {
       points: gridPoints,
       minHeight,
       maxHeight,
-      gridSize,
+      gridSize: effectiveGridSize,
       gridSpacing,
       center: effectiveCenter,
       lineIndicesMap,
       fillIndicesMap,
-      linePositions: new Float32Array(linePositionsFlat),
-      lineColors: new Float32Array(lineColorsFlat),
+      linePositions,
+      lineColors,
       sectionPointsVec,
       sectionColorsVec
     };
 
-    // Batch state updates
-    setGeometries({ fill: fillGeom });
+    let linesGeom: THREE.BufferGeometry | null = null;
+    if (linePositionsFlat.length > 0) {
+      linesGeom = new THREE.BufferGeometry();
+      linesGeom.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+      linesGeom.setAttribute('color', new THREE.BufferAttribute(lineColors, 3));
+    }
+
+    setGeometries({ fill: fillGeom, lines: linesGeom });
     setLineData(linePointsVec.length > 0 ? { points: linePointsVec, colors: lineColorsVec } : null);
     setSectionData({ points: sectionPointsVec, colors: sectionColorsVec });
     setIsGenerating(false);
-  }, [scene, gl, gridSize, gridSpacing, heightColorScale, targetSurfaceConfig, effectiveCenter, circularMask, showFill]);
+  }, [scene, gl, effectiveGridSize, gridSpacing, heightColorScale, targetSurfaceConfig, effectiveCenter, circularMask, showFill]);
 
-  // Excavation & Section update
+  // Excavation & Section update (throttle: run heavy work every 3 frames)
   useFrame(() => {
-    // Auto-follow logic
+    if (!viewActive) return;
+
+    frameCounterRef.current = (frameCounterRef.current + 1) % 3;
+    const runHeavyThisFrame = frameCounterRef.current === 0;
+
+    // Auto-follow logic (lightweight, every frame)
     if (gridCenterMode !== 'manual') {
       const threshold = gridSpacing * 5;
       const thresholdSq = threshold * threshold;
@@ -497,9 +518,19 @@ export function TerrainGrid({
     }
 
     if (!cuttingEdgeRef?.current || !gridDataRef.current) return;
+    if (!runHeavyThisFrame) return;
 
     const worldPos = _worldPos.current;
     cuttingEdgeRef.current.getWorldPosition(worldPos);
+
+    // Dirty check: skip excavation if cutting edge hasn't moved
+    const ceKey = `${worldPos.x.toFixed(6)}_${worldPos.y.toFixed(6)}_${worldPos.z.toFixed(6)}`;
+    if (ceKey === prevExcavationKey.current) {
+      // Still need to run section update below if applicable
+    } else {
+      prevExcavationKey.current = ceKey;
+      needsExcavation.current = true;
+    }
 
     const { center, gridSize, gridSpacing: spacing, points, lineIndicesMap, fillIndicesMap, minHeight, maxHeight } = gridDataRef.current;
     const halfSize = (gridSize * spacing) / 2;
@@ -525,7 +556,7 @@ export function TerrainGrid({
       const h01 = points[idx01]?.height;
       const h11 = points[idx11]?.height;
       if (h00 == null || h10 == null || h01 == null || h11 == null) return null;
-      return (1-u)*(1-v)*h00 + u*(1-v)*h10 + (1-u)*v*h01 + u*v*h11;
+      return (1 - u) * (1 - v) * h00 + u * (1 - v) * h10 + (1 - u) * v * h01 + u * v * h11;
     };
 
     // --- Section Line Update (with dirty check) ---
@@ -586,10 +617,11 @@ export function TerrainGrid({
       }
     }
 
-    if (!lineData) return;
+    if (!gridDataRef.current?.linePositions || !needsExcavation.current) return;
+    needsExcavation.current = false;
 
-    // Excavation
-    const EXCAVATION_RADIUS = gridSpacing * 2.5;
+    // Excavation (reduced radius for lighter updates)
+    const EXCAVATION_RADIUS = gridSpacing * 2;
     const EXCAVATION_RADIUS_SQ = EXCAVATION_RADIUS * EXCAVATION_RADIUS;
 
     const localX = worldPos.x - (center.x - halfSize);
@@ -619,7 +651,7 @@ export function TerrainGrid({
 
         const dx = p.x - worldPos.x;
         const dz = p.z - worldPos.z;
-        const distSq = dx*dx + dz*dz;
+        const distSq = dx * dx + dz * dz;
 
         if (distSq <= EXCAVATION_RADIUS_SQ && p.height > worldPos.y) {
           p.height = worldPos.y;
@@ -654,12 +686,10 @@ export function TerrainGrid({
     }
 
     if (hasUpdate) {
-      if (linesMeshRef.current) {
+      if (linesMeshRef.current?.geometry) {
         const geom = linesMeshRef.current.geometry;
-        if (geom) {
-          geom.setPositions(linesPosArr);
-          geom.setColors(linesColorArr);
-        }
+        (geom.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+        (geom.attributes.color as THREE.BufferAttribute).needsUpdate = true;
       }
       if (fillPosAttr) (fillPosAttr as THREE.BufferAttribute).needsUpdate = true;
       if (fillColorAttr) (fillColorAttr as THREE.BufferAttribute).needsUpdate = true;
@@ -668,7 +698,7 @@ export function TerrainGrid({
 
   useEffect(() => {
     if (!visible) {
-      setGeometries({ fill: null });
+      setGeometries({ fill: null, lines: null });
       setLineData(null);
       setSectionData(null);
       gridDataRef.current = null;
@@ -684,7 +714,7 @@ export function TerrainGrid({
       // Cancel any in-progress generation
       generationIdRef.current++;
     };
-  }, [visible, gridSize, gridSpacing, heightColorScale, targetSurfaceConfig, effectiveCenter, circularMask, showFill, generateGridAsync]);
+  }, [visible, effectiveGridSize, gridSpacing, heightColorScale, targetSurfaceConfig, effectiveCenter, circularMask, showFill, generateGridAsync]);
 
   // Continuous update: periodically re-generate heightmap
   useEffect(() => {
@@ -721,31 +751,24 @@ export function TerrainGrid({
           />
         </mesh>
       )}
-      {lineData && !showSectionOnly && (
-        <Line
-           ref={linesMeshRef}
-           points={lineData.points}
-           vertexColors={lineData.colors}
-           segments
-           lineWidth={lineWidth}
-           color="white"
-           transparent
-           opacity={opacity}
-        />
+      {geometries.lines && !showSectionOnly && (
+        <lineSegments ref={linesMeshRef} geometry={geometries.lines}>
+          <lineBasicMaterial vertexColors transparent opacity={opacity} />
+        </lineSegments>
       )}
       {sectionData && showSectionOnly && (
         <Line
-           ref={sectionLineRef}
-           points={sectionData.points}
-           vertexColors={sectionData.colors}
-           segments
-           lineWidth={lineWidth}
-           color="white"
-           transparent
-           opacity={opacity}
-           depthTest={false}
-           renderOrder={999}
-           frustumCulled={false}
+          ref={sectionLineRef}
+          points={sectionData.points}
+          vertexColors={sectionData.colors}
+          segments
+          lineWidth={lineWidth}
+          color="white"
+          transparent
+          opacity={opacity}
+          depthTest={false}
+          renderOrder={999}
+          frustumCulled={false}
         />
       )}
     </group>

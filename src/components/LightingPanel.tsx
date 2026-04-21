@@ -6,6 +6,10 @@ export interface LightingConfig {
   directionalIntensity: number;
   directionalPosition: { x: number; y: number; z: number };
   environmentPreset: 'city' | 'sunset' | 'dawn' | 'night' | 'warehouse' | 'forest' | 'apartment' | 'studio' | 'park' | 'lobby' | 'none';
+  /** Off for lighter rendering. Default true. */
+  shadowEnabled?: boolean;
+  /** Default [256, 256]. Use lower for performance. */
+  shadowMapSize?: [number, number];
 }
 
 interface LightingPanelProps {
@@ -107,6 +111,21 @@ export function LightingPanel({ config, onChange }: LightingPanelProps) {
             <option value="park">Park</option>
             <option value="lobby">Lobby</option>
           </select>
+          <p className="text-[10px] text-slate-400 mt-1">None = lighter (no IBL).</p>
+        </div>
+
+        {/* Shadows (performance) */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+          <label className="text-xs font-medium text-slate-600">Shadows</label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.shadowEnabled !== false}
+              onChange={(e) => handleChange('shadowEnabled', e.target.checked)}
+              className="rounded border-slate-300"
+            />
+            <span className="text-xs text-slate-500">On</span>
+          </label>
         </div>
       </div>
     </div>
